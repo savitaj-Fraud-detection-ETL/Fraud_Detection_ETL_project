@@ -3,36 +3,6 @@
 # to manage sensitive information securely and avoid storing plaintext credentials in configuration files.
 
 
-variable "aws_access_key" {
-  description = "AWS Access Key"
-  type        = string
-  sensitive   = true
-}
-
-variable "aws_secret_key" {
-  description = "AWS Secret Key"
-  type        = string
-  sensitive   = true
-}
-
-variable "rds_password" {
-  description = "Password for RDS PostgreSQL"
-  type        = string
-  sensitive   = true
-}
-
-provider "aws" {
-  region = "ca-central-1"
-  access_key = var.aws_access_key
-  secret_key = var.aws_secret_key
-}
-
-variable "lambda_file" {
-  description = "Lambda file location"
-  type        = string
-  sensitive   = false
-}
-
 # S3 Bucket for Fraud Data
 resource "aws_s3_bucket" "fraud_data" {
   bucket = "fraud-transactions-data-bucket"
@@ -133,7 +103,7 @@ resource "aws_lambda_function" "fraud_lambda" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda_function_aws.lambda_handler"
   filename        = var.lambda_file
-  
+
   tags = {
     Project = "fraud-detection-ETL"
   }
