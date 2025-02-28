@@ -27,3 +27,9 @@ variable "lambda_file" {
   type        = string
   sensitive   = false
 }
+
+variable "lambda_layer_dependencies_file" {
+  description = "Lambda file location"
+  type        = string
+  sensitive   = false
+}

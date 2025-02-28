@@ -57,6 +57,11 @@ resource "aws_iam_policy" "lambda_policy" {
     },
     {
       "Effect": "Allow",
+      "Action": ["s3:GetObject"],
+      "Resource": "arn:aws:s3:::frauddetectionetl-lambda-function-layer/*"
+    },
+    {
+      "Effect": "Allow",
       "Action": ["rds:*"],
       "Resource": "*"
     },
@@ -68,6 +73,14 @@ resource "aws_iam_policy" "lambda_policy" {
         "logs:PutLogEvents"
       ],
       "Resource": "arn:aws:logs:*:*:*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "lambda:GetLayerVersion",
+        "lambda:GetLayerVersionPolicy"
+      ],
+      "Resource": "arn:aws:lambda:us-east-1:336392948345:layer:AWSLambda-Python39-SciPy1x:3"
     }
   ]
 }
@@ -96,6 +109,27 @@ resource "aws_db_instance" "fraud_rds" {
   }
 }
 
+#AWS Lambda function Layer - Pandas, psycopg2
+
+resource "aws_s3_bucket" "fraudDetectionETL_lambda_function_dependencyLayer_bucket"{
+  bucket = "frauddetectionetl-lambda-function-layer"
+}
+
+resource "aws_s3_object" "fraudDetectionETL_lambda_function_layer_zip"{
+  bucket = aws_s3_bucket.fraudDetectionETL_lambda_function_dependencyLayer_bucket.id
+  key = "frauddetectionetl-main/dependencies.zip"
+  source = var.lambda_layer_dependencies_file
+  etag = filemd5(var.lambda_layer_dependencies_file)
+}
+
+resource "aws_lambda_layer_version" "fraudDetectionETL_lambda_function_layer" {
+  layer_name = "fraudDetectionETL_python_dependencies_pandas_psycopg2"
+  s3_bucket = aws_s3_bucket.fraudDetectionETL_lambda_function_dependencyLayer_bucket.id
+  s3_key = aws_s3_object.fraudDetectionETL_lambda_function_layer_zip.key
+  compatible_runtimes = ["python3.9"]
+  description = "Containes dependencies for pandas and psycopg2"
+}
+
 # AWS Lambda Function
 resource "aws_lambda_function" "fraud_lambda" {
   function_name    = "fraud-detection-etl-lambda"
@@ -103,6 +137,9 @@ resource "aws_lambda_function" "fraud_lambda" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda_function_aws.lambda_handler"
   filename        = var.lambda_file
+  source_code_hash = filebase64sha256(var.lambda_file)
+  layers = [aws_lambda_layer_version.fraudDetectionETL_lambda_function_layer.arn]
+  timeout = 50
 
   tags = {
     Project = "fraud-detection-ETL"
@@ -112,7 +149,7 @@ resource "aws_lambda_function" "fraud_lambda" {
     variables = {
       S3_BUCKET = aws_s3_bucket.fraud_data.bucket
       RDS_HOST  = aws_db_instance.fraud_rds.address
-      RDS_USER  = "admin"
+      RDS_USER  = "fraud_etl_admin"
       RDS_PASS  = var.rds_password
       RDS_DB    = "fraud_detection_db"
     }
@@ -140,7 +177,7 @@ resource "aws_lambda_permission" "allow_s3" {
 
 resource "aws_cloudwatch_log_group" "fraud_lambda_log_group" {
   name              = "/aws/lambda/${aws_lambda_function.fraud_lambda.function_name}"
-  retention_in_days = 14  # Adjust as needed (14 days is common)
+  retention_in_days = 14 
 
   tags = {
     Project = "fraud-detection-ETL"
