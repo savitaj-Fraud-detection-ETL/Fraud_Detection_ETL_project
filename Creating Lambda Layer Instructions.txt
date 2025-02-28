@@ -1,0 +1,66 @@
+Creating a Lambda layer:
+
+There is no need to create a virtual environment, since it will add some metadata.
+
+######## The file structure required ########
+
+	my_lambda_layer/
+	│── python/
+	│   ├── requests/
+	│   ├── numpy/
+	│   ├── pandas/
+	│   ├── ...
+	│   ├── site-packages/  # Optional (for some dependencies)
+	│   └── ...
+	│── my_layer.zip
+	
+######## Commands ########
+	mkdir my_lambda_layer
+	cd my_lambda_layer
+	mkdir python
+		#Don't do 'cd python'
+	pip install requests numpy pandas -t python/
+		which AWS Lambda expects.
+		📝 Note: -t python/ ensures that dependencies are installed inside the python folder,
+	
+	powershell Compress-Archive -Path python -DestinationPath my_layer.zip
+		#After installing, create a zip, that should be in accordance with the file structure above.
+
+######## Using Terraform for Creating layer ########
+
+1) If the size of the layer is greater than 10MB, then create a S3 bucket and reference the layer from it. 
+AWS Lambda has a direct upload size limit of 10MB when deploying via Terraform.
+
+
+
+Direct Upload:
+
+	resource "aws_lambda_layer_version" "python_layer" {
+	  layer_name          = "PythonDependencies"
+	  filename           = "my_layer.zip"  # Direct upload if <10MB
+	  source_code_hash    = filebase64sha256("my_layer.zip")
+	  compatible_runtimes = ["python3.9"]
+	  description         = "Lambda Layer with Python dependencies"
+	}
+	
+	
+>10MB Upload:
+
+	resource "aws_s3_bucket" "lambda_layer_bucket" {
+	  bucket = "my-python-layer-bucket"
+	}
+
+	resource "aws_s3_object" "lambda_layer_zip" {
+	  bucket = aws_s3_bucket.lambda_layer_bucket.id
+	  key    = "my_layer.zip" #Refers to the name/directory structure present in S3 bucket
+	  source = "my_layer.zip" #Referes to local file path
+	  etag   = filemd5("my_layer.zip")
+	}
+
+	resource "aws_lambda_layer_version" "python_layer" {
+	  layer_name          = "PythonDependencies"
+	  s3_bucket          = aws_s3_bucket.lambda_layer_bucket.id
+	  s3_key             = aws_s3_object.lambda_layer_zip.key
+	  compatible_runtimes = ["python3.9"]
+	  description         = "Lambda Layer with Python dependencies"
+	}
